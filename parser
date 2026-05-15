@@ -1,0 +1,18 @@
+def parse_notes(raw_text):
+    data = {}
+
+    lines = raw_text.splitlines()
+
+    for line in lines:
+        if ":" not in line:
+            continue
+
+        question, answer = line.split(":", 1)
+
+        question = question.strip()
+        answer = answer.strip()
+
+        data[question] = answer
+
+    return data
+    
