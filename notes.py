@@ -1,17 +1,27 @@
+
 import streamlit as st
 import ast
 
 
-# =========================
+# =====================================================
 # PARSER
-# =========================
+# =====================================================
+
 
 def parse_notes(raw_text):
-    data = {}
+
+    data = {
+        "general": {},
+        "PP": {},
+        "SP": {},
+        "PD": {},
+        "SD": {}
+    }
 
     lines = raw_text.splitlines()
 
     for line in lines:
+
         if ":" not in line:
             continue
 
@@ -20,21 +30,64 @@ def parse_notes(raw_text):
         question = question.strip()
         answer = answer.strip()
 
-        data[question] = answer
+        section = "general"
+
+        if "(Primary pick-up)" in question:
+            section = "PP"
+
+        elif "(Secondary pick-up)" in question:
+            section = "SP"
+
+        elif "(Primary drop-off)" in question:
+            section = "PD"
+
+        elif "(Secondary drop-off)" in question:
+            section = "SD"
+
+        data[section][question] = answer
+
+        # GLOBAL QUESTIONS
+
+        if "primary pick-up location on or off military base" in question:
+            data["PP"]["BASE"] = answer
+
+        if "secondary pick-up location on or off base" in question:
+            data["SP"]["BASE"] = answer
+
+        if "primary destination address on or off military base" in question:
+            data["PD"]["BASE"] = answer
+
+        if "secondary destination address on or off military base" in question:
+            data["SD"]["BASE"] = answer
+
+        if "primary pick-up location house, apartment or storage unit" in question:
+            data["PP"]["TYPE"] = answer
+
+        if "secondary pick-up location house, apartment or storage unit" in question:
+            data["SP"]["TYPE"] = answer
+
+        if "primary destination house, apartment or storage unit" in question:
+            data["PD"]["TYPE"] = answer
+
+        if "secondary destination house, apartment or storage unit" in question:
+            data["SD"]["TYPE"] = answer
 
     return data
 
 
-# =========================
+# =====================================================
 # HELPERS
-# =========================
+# =====================================================
 
-def get_value(data, key, default=""):
-    return data.get(key, default).strip()
+
+def get_value(section, key, default=""):
+    return section.get(key, default).strip()
+
 
 
 def clean_text(value):
     return value.replace(".", "").strip()
+
 
 
 def normalize_list(value):
@@ -43,6 +96,7 @@ def normalize_list(value):
         return ""
 
     try:
+
         parsed = ast.literal_eval(value)
 
         if isinstance(parsed, list):
@@ -66,181 +120,187 @@ def normalize_list(value):
     return value
 
 
-# =========================
-# STORAGE
-# =========================
+# =====================================================
+# GENERAL
+# =====================================================
+
 
 def format_storage(data):
 
     storage = get_value(
-        data,
+        data["general"],
         "Do you need temporary storage unit?  (company provided storage up to 90 days)"
     )
 
     if "No" in storage:
         return "No"
 
-    days = get_value(
-        data,
+    duration = get_value(
+        data["general"],
         "For how long you will need temporary storage?"
     )
 
-    return f"Temporary storage required ({days})"
+    return f"Temporary storage required ({duration})"
 
 
-# =========================
-# PICKUP ACCESS #1
-# =========================
 
-def pickup_access_1(data):
+def format_pro_gear(data):
 
-    base = clean_text(
-        get_value(
-            data,
-            "Is the pick-up location on or off military base?"
-        )
+    pro = get_value(
+        data["general"],
+        "Are we shipping any pro-gear?"
     )
 
-    parking = normalize_list(
-        get_value(
-            data,
-            "Do we have street parking, driveway or parking lot available?"
-        )
+    if "No" in pro:
+        return "No"
+
+    weight = get_value(
+        data["general"],
+        "What is the approximate weight of the pro-gear?"
     )
 
-    restrictions = clean_text(
-        get_value(
-            data,
-            "Are there any permits or restrictions for parking on the street or parking lot? (don't consider on-base access as restrictions or permits needed)"
-        )
+    return f"Yes, approximately {weight}"
+
+
+
+def format_weapons(data):
+
+    weapons = get_value(
+        data["general"],
+        "Are we shipping any firearms?"
     )
 
-    return f"{base}. {parking.capitalize()} available. {restrictions}."
+    if "No" in weapons:
+        return "No"
+
+    firearm_info = get_value(
+        data["general"],
+        "Please enter make, model and serial number for each."
+    )
+
+    return f"Yes\n{firearm_info}"
 
 
-# =========================
+# =====================================================
+# ACCESS FORMATTER
+# =====================================================
+
+
+def format_access(section):
+
+    base = get_value(section, "BASE")
+
+    result = []
+
+    if base:
+        result.append(clean_text(base) + ".")
+
+    # LOADING DOCK
+
+    loading_dock = ""
+
+    for key in section.keys():
+        if "loading dock available" in key.lower():
+            loading_dock = section[key]
+
+    if "Yes" in loading_dock or "Loading dock available" in loading_dock:
+        result.append("Loading dock available.")
+
+    # PARKING
+
+    for key in section.keys():
+
+        if "street parking" in key.lower() or "parking lot" in key.lower():
+
+            parking = normalize_list(section[key])
+
+            if parking:
+                result.append(parking.capitalize() + ".")
+
+            break
+
+    # RESTRICTIONS
+
+    for key in section.keys():
+
+        if "permits or restrictions" in key.lower():
+
+            restriction = clean_text(section[key])
+
+            if restriction:
+                result.append(restriction + ".")
+
+            break
+
+    return " ".join(result)
+
+
+# =====================================================
 # HOUSE LAYOUT
-# =========================
+# =====================================================
 
-def house_layout(data):
 
-    stories = clean_text(
-        get_value(
-            data,
-            "How many stories does your house have?"
-        )
-    )
+def format_house(section):
 
-    bedrooms = clean_text(
-        get_value(
-            data,
-            "How many bedrooms does your house has?"
-        )
-    )
+    stories = ""
+    bedrooms = ""
+    extras = ""
 
-    extras = normalize_list(
-        get_value(
-            data,
-            "Is there any garage, shed, attic or basement?"
-        )
-    )
+    for key in section.keys():
+
+        if "stories does your house have" in key:
+            stories = clean_text(section[key])
+
+        if "bedrooms does your house has" in key:
+            bedrooms = clean_text(section[key])
+
+        if "garage, shed, attic or basement" in key:
+            extras = normalize_list(section[key])
 
     return f"{stories}, {bedrooms} house with a {extras}."
 
 
-# =========================
-# PICKUP ACCESS #2
-# =========================
-
-def pickup_access_2(data):
-
-    base = clean_text(
-        get_value(
-            data,
-            "Is the secondary pick-up location on or off base?"
-        )
-    )
-
-    loading_dock = get_value(
-        data,
-        "Is the loading dock available?"
-    )
-
-    parking = clean_text(
-        normalize_list(
-            get_value(
-                data,
-                "Do we have street parking or parking lot available?"
-            )
-        )
-    )
-
-    restrictions = clean_text(
-        get_value(
-            data,
-            "Are there any permits or restrictions for parking on the street or parking lot?"
-        )
-    )
-
-    dock_text = ""
-
-    if "Yes" in loading_dock:
-        dock_text = "Loading dock available."
-
-    return f"{base}. {dock_text} {parking.capitalize()}. {restrictions}."
-
-
-# =========================
+# =====================================================
 # APARTMENT LAYOUT
-# =========================
+# =====================================================
 
-def apartment_layout(data):
 
-    levels = clean_text(
-        get_value(
-            data,
-            "How many levels is the apartment?"
-        )
-    )
+def format_apartment(section):
 
-    bedrooms = clean_text(
-        get_value(
-            data,
-            "How many bedrooms does your apartment has?"
-        )
-    )
+    floor = ""
+    bedrooms = ""
+    apartment = ""
+    locker = ""
+    elevator = ""
+    reservation = ""
+    coi = ""
+    levels = ""
 
-    apartment = get_value(
-        data,
-        "What is the apartment number?"
-    )
+    for key in section.keys():
 
-    floor = get_value(
-        data,
-        "What floor is your apartment on?"
-    )
+        if "floor is your apartment" in key:
+            floor = clean_text(section[key])
 
-    locker = get_value(
-        data,
-        "Are there any storage lockers in the building?"
-    )
+        if "bedrooms does your apartment" in key:
+            bedrooms = clean_text(section[key])
 
-    elevator = clean_text(
-        get_value(
-            data,
-            "Is there elevator available?"
-        )
-    )
+        if "apartment number" in key:
+            apartment = section[key]
 
-    reservation = get_value(
-        data,
-        "Is reservation of the elevator required?"
-    )
+        if "storage lockers" in key:
+            locker = section[key]
 
-    coi = get_value(
-        data,
-        "Is a certificate of insurance needed? (COI)"
-    )
+        if "elevator available" in key:
+            elevator = clean_text(section[key])
+
+        if "reservation of the elevator" in key:
+            reservation = section[key]
+
+        if "certificate of insurance" in key:
+            coi = section[key]
+
+        if "levels is the apartment" in key:
+            levels = clean_text(section[key])
 
     locker_text = "without storage locker"
 
@@ -257,59 +317,160 @@ def apartment_layout(data):
     if "Yes" in coi:
         coi_text = "COI required"
 
+    if levels:
+        return (
+            f"{levels}, {bedrooms} apartment #{apartment} "
+            f"on the {floor} floor {locker_text}. "
+            f"{elevator}{reservation_text}. "
+            f"{coi_text}."
+        )
+
     return (
-        f"{levels}, {bedrooms} apartment #{apartment} "
+        f"{bedrooms} apartment #{apartment} "
         f"on the {floor} floor {locker_text}. "
         f"{elevator}{reservation_text}. "
         f"{coi_text}."
     )
 
 
-# =========================
+# =====================================================
+# STORAGE LAYOUT
+# =====================================================
+
+
+def format_storage_unit(section):
+
+    size = ""
+    number = ""
+    climate = ""
+    access = ""
+    indoor_outdoor = ""
+    floor = ""
+
+    for key in section.keys():
+
+        if "size of the storage unit" in key:
+            size = section[key]
+
+        if "storage unit number" in key:
+            number = section[key]
+
+        if "climate controlled" in key:
+            climate = section[key]
+
+        if "after hours or on weekends" in key:
+            access = section[key]
+
+        if "indoor or outdoor" in key:
+            indoor_outdoor = section[key]
+
+        if "floor is the storage unit" in key:
+            floor = section[key]
+
+    return (
+        f"{indoor_outdoor} {climate} storage unit #{number} "
+        f"{floor}. Unit size {size}. {access}"
+    )
+
+
+# =====================================================
+# BARRACKS LAYOUT
+# =====================================================
+
+
+def format_barracks(section):
+
+    floor = ""
+    room = ""
+    elevator = ""
+    stairs = ""
+
+    for key in section.keys():
+
+        if "room on" in key:
+            floor = clean_text(section[key])
+
+        if "room number" in key:
+            room = section[key]
+
+        if "elevator available" in key:
+            elevator = clean_text(section[key])
+
+        if "flights of stairs" in key:
+            stairs = section[key]
+
+    elevator_text = elevator
+
+    if "No elevator" in elevator:
+        elevator_text = f"No elevator. {stairs} flights of stairs"
+
+    return (
+        f"Barracks room #{room} on the {floor} floor. "
+        f"{elevator_text}."
+    )
+
+
+# =====================================================
+# DYNAMIC LAYOUT
+# =====================================================
+
+
+def format_layout(section):
+
+    location_type = get_value(section, "TYPE")
+
+    if "House" in location_type:
+        return format_house(section)
+
+    if "Apartment" in location_type:
+        return format_apartment(section)
+
+    if "Storage" in location_type:
+        return format_storage_unit(section)
+
+    if "Barracks" in location_type:
+        return format_barracks(section)
+
+    return ""
+
+
+# =====================================================
 # GENERATOR
-# =========================
+# =====================================================
+
 
 def generate_output(data):
 
-    finalized = get_value(
-        data,
-        "Do you have finalized destination address? (don't include tentative addresses and in case of NTS select NTS)"
-    )
-
-    destination_access = ""
-    destination_layout = ""
-    destination_truck = ""
-
-    if finalized == "No":
-        destination_access = "TBD"
-        destination_layout = "TBD"
-        destination_truck = "TBD"
-
     result = f"""Storage: {format_storage(data)}
-Pro gear: No
-Weapons: No
+Pro gear: {format_pro_gear(data)}
+Weapons: {format_weapons(data)}
 
 Packing: FULL CP
 
-Pick-up Access #1: {pickup_access_1(data)}
-Layout #1: {house_layout(data)}
-Truck #1: TBD
+Pick-up Access #1: {format_access(data['PP'])}
+Layout #1: {format_layout(data['PP'])}
+Truck #1:
 
-Pick-up Access #2: {pickup_access_2(data)}
-Layout #2: {apartment_layout(data)}
-Truck #2: TBD
+Pick-up Access #2: {format_access(data['SP'])}
+Layout #2: {format_layout(data['SP'])}
+Truck #2:
 
-Destination Access #1: {destination_access}
-Layout #1: {destination_layout}
-Truck #1: {destination_truck}
+Destination Access #1: {format_access(data['PD'])}
+Layout #1: {format_layout(data['PD'])}
+Truck #1:
+
+Destination Access #2: {format_access(data['SD'])}
+Layout #2: {format_layout(data['SD'])}
+Truck #2:
 """
 
     return result
 
 
-# =========================
+# =====================================================
 # STREAMLIT
-# =========================
+# =====================================================
+
 
 st.set_page_config(page_title="Move Survey Formatter")
 
@@ -317,8 +478,9 @@ st.title("Move Survey Formatter")
 
 raw_text = st.text_area(
     "Paste raw questionnaire",
-    height=400
+    height=500
 )
+
 
 if st.button("Convert"):
 
@@ -329,5 +491,5 @@ if st.button("Convert"):
     st.text_area(
         "Formatted Output",
         output,
-        height=500
+        height=600
     )
