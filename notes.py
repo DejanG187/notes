@@ -439,7 +439,66 @@ def format_layout(section):
 # =====================================================
 
 
+def build_location_block(title, access, layout, truck, numbered=False, number=1):
+
+    if numbered:
+        return f"""{title} #{number}: {access}
+Layout #{number}: {layout}
+Truck #{number}: {truck}
+"""
+
+    return f"""{title}: {access}
+Layout: {layout}
+Truck: {truck}
+"""
+
+
+
 def generate_output(data):
+
+    # =================================================
+    # DETECT MULTIPLE LOCATIONS
+    # =================================================
+
+    has_second_pickup = bool(get_value(data["SP"], "TYPE"))
+    has_second_destination = bool(get_value(data["SD"], "TYPE"))
+
+    multiple_pickups = has_second_pickup
+    multiple_destinations = has_second_destination
+
+    use_numbering = multiple_pickups or multiple_destinations
+
+    # =================================================
+    # DESTINATION STATUS
+    # =================================================
+
+    finalized = get_value(
+        data["general"],
+        "Do you have finalized destination address? (don't include tentative addresses and in case of NTS select NTS)"
+    )
+
+    destination_access_1 = ""
+    destination_layout_1 = ""
+    destination_truck_1 = ""
+
+    if finalized == "No":
+        destination_access_1 = "TBD"
+        destination_layout_1 = "TBD"
+        destination_truck_1 = "TBD"
+
+    elif finalized == "NTS":
+        destination_access_1 = "NTS"
+        destination_layout_1 = "NTS"
+        destination_truck_1 = "NTS"
+
+    else:
+        destination_access_1 = format_access(data['PD'])
+        destination_layout_1 = format_layout(data['PD'])
+        destination_truck_1 = ""
+
+    # =================================================
+    # BUILD OUTPUT
+    # =================================================
 
     result = f"""Storage: {format_storage(data)}
 Pro gear: {format_pro_gear(data)}
@@ -447,22 +506,69 @@ Weapons: {format_weapons(data)}
 
 Packing: FULL CP
 
-Pick-up Access #1: {format_access(data['PP'])}
-Layout #1: {format_layout(data['PP'])}
-Truck #1:
-
-Pick-up Access #2: {format_access(data['SP'])}
-Layout #2: {format_layout(data['SP'])}
-Truck #2:
-
-Destination Access #1: {format_access(data['PD'])}
-Layout #1: {format_layout(data['PD'])}
-Truck #1:
-
-Destination Access #2: {format_access(data['SD'])}
-Layout #2: {format_layout(data['SD'])}
-Truck #2:
 """
+
+    # =================================================
+    # PICKUP #1
+    # =================================================
+
+    result += build_location_block(
+        "Pick-up Access",
+        format_access(data['PP']),
+        format_layout(data['PP']),
+        "",
+        use_numbering,
+        1
+    )
+
+    result += "\n"
+
+    # =================================================
+    # PICKUP #2
+    # =================================================
+
+    if has_second_pickup:
+
+        result += build_location_block(
+            "Pick-up Access",
+            format_access(data['SP']),
+            format_layout(data['SP']),
+            "",
+            True,
+            2
+        )
+
+        result += "\n"
+
+    # =================================================
+    # DESTINATION #1
+    # =================================================
+
+    result += build_location_block(
+        "Destination Access",
+        destination_access_1,
+        destination_layout_1,
+        destination_truck_1,
+        use_numbering,
+        1
+    )
+
+    result += "\n"
+
+    # =================================================
+    # DESTINATION #2
+    # =================================================
+
+    if has_second_destination and finalized not in ["No", "NTS"]:
+
+        result += build_location_block(
+            "Destination Access",
+            format_access(data['SD']),
+            format_layout(data['SD']),
+            "",
+            True,
+            2
+        )
 
     return result
 
